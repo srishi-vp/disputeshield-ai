@@ -142,8 +142,9 @@ Razorpay APIs
 Razorpay Webhooks
 
 Deployment
-
 Vercel
+
+
 📂 Project Structure
 DisputeShield-v0/
 ├── app/
@@ -165,8 +166,9 @@ DisputeShield-v0/
 ├── public/
 ├── package.json
 └── README.md
-🔐 Security
 
+
+🔐 Security
 API keys and secrets are stored as environment variables and are not committed to the repository.
 
 Required environment variables include:
