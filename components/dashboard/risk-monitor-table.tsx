@@ -1,0 +1,654 @@
+"use client"
+
+import { Fragment, useEffect, useState } from "react"
+import { cn } from "@/lib/utils"
+import {
+  CircleHelp,
+  ChevronDown,
+  ShieldCheck,
+} from "lucide-react"
+import { supabase } from "@/lib/supabase"
+
+type Transaction = {
+  id: number
+  transaction_id: string
+  transaction_time: string
+  customer_id: string | number | null
+  merchant_id: string | number | null
+  transaction_amount: number | null
+
+  account_age_days: number | null
+  credit_score_band: number | null
+  kyc_level: number | null
+  avg_monthly_spend: number | null
+  merchant_risk_score: number | null
+
+  payment_channel: string | null
+  device_type: string | null
+
+  is_international: boolean | number | null
+
+  ip_risk_score: number | null
+  txn_count_1h: number | null
+  txn_count_24h: number | null
+  failed_txn_count_24h: number | null
+
+  geo_distance_from_last_txn: number | null
+  amount_deviation_from_user_mean: number | null
+
+  risk_reasons: string[] | null
+
+  // Saved ML results from Supabase
+  fraud_probability: number | null
+  risk_score: number | null
+  risk_level: string | null
+
+  // Saved AI prevention recommendations from Supabase
+  prevention_actions: string[] | null
+}
+
+function getStatus(riskLevel: string) {
+  const level = riskLevel?.toLowerCase()
+
+  if (level === "high") return "Flagged"
+  if (level === "medium") return "Under review"
+
+  return "Cleared"
+}
+
+const statusStyles: Record<string, string> = {
+  Cleared: "bg-risk-low/15 text-risk-low",
+  "Under review": "bg-risk-med/15 text-risk-med",
+  Flagged: "bg-risk-high/15 text-risk-high",
+}
+
+function RiskScoreMeter({ score }: { score: number }) {
+  return (
+    <div className="flex min-w-[100px] items-center gap-2">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div
+          className={cn(
+            "h-full rounded-full",
+            score >= 71
+              ? "bg-risk-high"
+              : score >= 31
+                ? "bg-risk-med"
+                : "bg-risk-low"
+          )}
+          style={{
+            width: `${Math.min(Math.max(score, 0), 100)}%`,
+          }}
+        />
+      </div>
+
+      <span className="w-7 text-right text-xs font-medium tabular-nums text-navy-foreground">
+        {score}
+      </span>
+    </div>
+  )
+}
+
+function RiskLevelChip({ score }: { score: number }) {
+  const level =
+    score >= 71 ? "High" : score >= 31 ? "Medium" : "Low"
+
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+        level === "High"
+          ? "bg-risk-high/15 text-risk-high"
+          : level === "Medium"
+            ? "bg-risk-med/15 text-risk-med"
+            : "bg-risk-low/15 text-risk-low"
+      )}
+    >
+      {level}
+    </span>
+  )
+}
+
+function ReasonList({ txn }: { txn: Transaction }) {
+  const reasons = Array.isArray(txn.risk_reasons)
+    ? txn.risk_reasons
+    : []
+
+  if (reasons.length === 0) {
+    return (
+      <p className="text-sm text-navy-muted">
+        ML prediction generated successfully for this transaction.
+      </p>
+    )
+  }
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-navy-muted">
+        Risk signals
+      </p>
+
+      <ul className="flex flex-wrap gap-2">
+        {reasons.map((reason, index) => (
+          <li
+            key={`${reason}-${index}`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-risk/25 bg-risk/10 px-2.5 py-1 text-xs font-medium text-risk"
+          >
+            <span
+              className="size-1.5 rounded-full bg-risk"
+              aria-hidden="true"
+            />
+
+            {reason}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function PreventionList({ txn }: { txn: Transaction }) {
+  const actions = Array.isArray(txn.prevention_actions)
+    ? txn.prevention_actions
+    : []
+
+  if (actions.length === 0) {
+    return (
+      <div className="mt-5 rounded-lg border border-navy-border bg-white/[0.02] p-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4 text-risk" />
+
+          <p className="text-xs font-semibold uppercase tracking-wider text-navy-muted">
+            AI Prevention
+          </p>
+        </div>
+
+        <p className="mt-2 text-sm text-navy-muted">
+          No specific prevention action was stored for this transaction.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-5 rounded-lg border border-risk/20 bg-risk/[0.04] p-4">
+      <div className="flex items-center gap-2">
+        <ShieldCheck className="size-4 text-risk" />
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-navy-muted">
+            AI Prevention Actions
+          </p>
+
+          <p className="mt-0.5 text-[11px] text-navy-muted">
+            Recommended actions generated by the risk engine.
+          </p>
+        </div>
+      </div>
+
+      <ul className="mt-4 space-y-2">
+        {actions.map((action, index) => (
+          <li
+            key={`${action}-${index}`}
+            className="flex items-start gap-2.5 rounded-lg border border-navy-border bg-navy-card px-3 py-2.5"
+          >
+            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-risk/15 text-[10px] font-bold text-risk">
+              ✓
+            </span>
+
+            <span className="text-xs leading-5 text-navy-foreground">
+              {action}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export function RiskMonitorTable() {
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [expanded, setExpanded] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function loadTransactions() {
+      try {
+        const { data, error } = await supabase
+          .from("transactions")
+          .select(`
+            id,
+            transaction_id,
+            transaction_time,
+            customer_id,
+            merchant_id,
+            transaction_amount,
+            account_age_days,
+            credit_score_band,
+            kyc_level,
+            avg_monthly_spend,
+            merchant_risk_score,
+            payment_channel,
+            device_type,
+            is_international,
+            ip_risk_score,
+            txn_count_1h,
+            txn_count_24h,
+            failed_txn_count_24h,
+            geo_distance_from_last_txn,
+            amount_deviation_from_user_mean,
+            risk_reasons,
+            fraud_probability,
+            risk_score,
+            risk_level,
+            prevention_actions
+          `)
+          .order("transaction_time", { ascending: false })
+
+        console.log("RISK MONITOR DATA:", data)
+        console.log("RISK MONITOR ERROR:", error)
+
+        if (error || !data) {
+          console.error(
+            "FAILED TO LOAD RISK MONITOR:",
+            error
+          )
+
+          setTransactions([])
+          setLoading(false)
+          return
+        }
+
+        const transactionsWithML = (
+          data as Transaction[]
+        ).map((transaction) => {
+          console.log("RISK MONITOR STORED ML:", {
+            transactionId: transaction.transaction_id,
+            fraud_probability:
+              transaction.fraud_probability,
+            risk_score: transaction.risk_score,
+            risk_level: transaction.risk_level,
+            prevention_actions:
+              transaction.prevention_actions,
+          })
+
+          return transaction
+        })
+
+        // Sort using the SAVED ML risk score
+        transactionsWithML.sort(
+          (a, b) =>
+            Number(b.risk_score ?? 0) -
+            Number(a.risk_score ?? 0)
+        )
+
+        setTransactions(transactionsWithML)
+
+        if (transactionsWithML.length > 0) {
+          setExpanded(transactionsWithML[0].id)
+        }
+
+        setLoading(false)
+      } catch (error) {
+        console.error(
+          "RISK MONITOR FAILED:",
+          error
+        )
+
+        setLoading(false)
+      }
+    }
+
+    loadTransactions()
+  }, [])
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-navy-border bg-navy-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-navy-border px-5 py-4">
+        <div className="flex items-center gap-2">
+          <span className="flex size-2 items-center justify-center">
+            <span className="absolute inline-flex size-2 animate-ping rounded-full bg-risk-low/70" />
+            <span className="relative inline-flex size-2 rounded-full bg-risk-low" />
+          </span>
+
+          <h2 className="text-sm font-semibold text-navy-foreground">
+            Live Risk Monitor
+          </h2>
+
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-navy-muted">
+            ML Stored
+          </span>
+        </div>
+
+        <p className="text-xs text-navy-muted">
+          Score bands:{" "}
+          <span className="text-risk-low">
+            0–30 Low
+          </span>{" "}
+          ·{" "}
+          <span className="text-risk-med">
+            31–70 Medium
+          </span>{" "}
+          ·{" "}
+          <span className="text-risk-high">
+            71–100 High
+          </span>
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="p-6 text-sm text-navy-muted">
+          Loading saved ML risk analysis...
+        </div>
+      ) : transactions.length === 0 ? (
+        <div className="p-6 text-sm text-navy-muted">
+          No transactions found.
+        </div>
+      ) : (
+        <>
+          {/* Desktop */}
+          <div className="block overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-navy-border text-xs uppercase tracking-wider text-navy-muted">
+                  <th className="px-5 py-3 font-medium">
+                    Transaction
+                  </th>
+
+                  <th className="px-3 py-3 font-medium">
+                    Time
+                  </th>
+
+                  <th className="px-3 py-3 font-medium">
+                    Amount
+                  </th>
+
+                  <th className="px-3 py-3 font-medium">
+                    Method
+                  </th>
+
+                  <th className="px-3 py-3 font-medium">
+                    ML Risk Score
+                  </th>
+
+                  <th className="px-3 py-3 font-medium">
+                    Level
+                  </th>
+
+                  <th className="px-3 py-3 font-medium">
+                    Status
+                  </th>
+
+                  <th className="px-5 py-3 text-right font-medium">
+                    Action
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {transactions.map((txn) => {
+                  const isOpen =
+                    expanded === txn.id
+
+                  const mlScore = Number(
+                    txn.risk_score ?? 0
+                  )
+
+                  const mlLevel =
+                    txn.risk_level ??
+                    (mlScore >= 71
+                      ? "High"
+                      : mlScore >= 31
+                        ? "Medium"
+                        : "Low")
+
+                  const status =
+                    getStatus(mlLevel)
+
+                  return (
+                    <Fragment key={txn.id}>
+                      <tr
+                        className={cn(
+                          "border-b border-navy-border/60 transition-colors",
+                          isOpen
+                            ? "bg-white/[0.03]"
+                            : "hover:bg-white/[0.02]"
+                        )}
+                      >
+                        <td className="px-5 py-3 font-mono text-xs text-navy-foreground">
+                          {txn.transaction_id}
+                        </td>
+
+                        <td className="px-3 py-3 tabular-nums text-navy-muted">
+                          {new Date(
+                            txn.transaction_time
+                          ).toLocaleString("en-IN")}
+                        </td>
+
+                        <td className="px-3 py-3 font-medium tabular-nums text-navy-foreground">
+                          ₹
+                          {Number(
+                            txn.transaction_amount ?? 0
+                          ).toLocaleString("en-IN")}
+                        </td>
+
+                        <td className="px-3 py-3 text-navy-muted">
+                          {txn.payment_channel ?? "—"}
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <RiskScoreMeter
+                            score={mlScore}
+                          />
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <RiskLevelChip
+                            score={mlScore}
+                          />
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                              statusStyles[status]
+                            )}
+                          >
+                            {status}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpanded(
+                                isOpen
+                                  ? null
+                                  : txn.id
+                              )
+                            }
+                            aria-expanded={isOpen}
+                            className="inline-flex items-center gap-1 rounded-lg border border-navy-border px-2.5 py-1.5 text-xs font-medium text-navy-foreground transition-colors hover:border-risk/40 hover:bg-white/5"
+                          >
+                            <CircleHelp className="size-3.5 text-risk" />
+
+                            Why flagged?
+
+                            <ChevronDown
+                              className={cn(
+                                "size-3.5 transition-transform",
+                                isOpen &&
+                                  "rotate-180"
+                              )}
+                            />
+                          </button>
+                        </td>
+                      </tr>
+
+                      {isOpen && (
+                        <tr className="border-b border-navy-border/60 bg-white/[0.02]">
+                          <td
+                            colSpan={8}
+                            className="px-5 py-4"
+                          >
+                            <div className="mb-3 text-xs text-navy-muted">
+                              ML fraud probability:{" "}
+                              <span className="font-semibold text-navy-foreground">
+                                {(
+                                  Number(
+                                    txn.fraud_probability ??
+                                      0
+                                  ) * 100
+                                ).toFixed(2)}
+                                %
+                              </span>
+                            </div>
+
+                            <div className="mb-3 text-xs text-navy-muted">
+                              Saved ML risk score:{" "}
+                              <span className="font-semibold text-navy-foreground">
+                                {mlScore}/100
+                              </span>
+                            </div>
+
+                            <ReasonList txn={txn} />
+
+                            <PreventionList txn={txn} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile */}
+          <ul className="hidden">
+            {transactions.map((txn) => {
+              const isOpen =
+                expanded === txn.id
+
+              const mlScore = Number(
+                txn.risk_score ?? 0
+              )
+
+              const mlLevel =
+                txn.risk_level ??
+                (mlScore >= 71
+                  ? "High"
+                  : mlScore >= 31
+                    ? "Medium"
+                    : "Low")
+
+              const status =
+                getStatus(mlLevel)
+
+              return (
+                <li
+                  key={txn.id}
+                  className="p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-xs text-navy-foreground">
+                        {txn.transaction_id}
+                      </p>
+
+                      <p className="mt-1 text-lg font-semibold tabular-nums text-navy-foreground">
+                        ₹
+                        {Number(
+                          txn.transaction_amount ?? 0
+                        ).toLocaleString("en-IN")}
+                      </p>
+
+                      <p className="text-xs text-navy-muted">
+                        {new Date(
+                          txn.transaction_time
+                        ).toLocaleString("en-IN")}
+                      </p>
+                    </div>
+
+                    <RiskLevelChip
+                      score={mlScore}
+                    />
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <RiskScoreMeter
+                      score={mlScore}
+                    />
+
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+                        statusStyles[status]
+                      )}
+                    >
+                      {status}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpanded(
+                        isOpen
+                          ? null
+                          : txn.id
+                      )
+                    }
+                    aria-expanded={isOpen}
+                    className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-lg border border-navy-border px-2.5 py-2 text-xs font-medium text-navy-foreground transition-colors hover:border-risk/40 hover:bg-white/5"
+                  >
+                    <CircleHelp className="size-3.5 text-risk" />
+
+                    Why flagged?
+
+                    <ChevronDown
+                      className={cn(
+                        "size-3.5 transition-transform",
+                        isOpen &&
+                          "rotate-180"
+                      )}
+                    />
+                  </button>
+
+                  {isOpen && (
+                    <div className="mt-3 rounded-lg bg-white/[0.03] p-3">
+                      <div className="mb-3 text-xs text-navy-muted">
+                        ML fraud probability:{" "}
+                        <span className="font-semibold text-navy-foreground">
+                          {(
+                            Number(
+                              txn.fraud_probability ??
+                                0
+                            ) * 100
+                          ).toFixed(2)}
+                          %
+                        </span>
+                      </div>
+
+                      <div className="mb-3 text-xs text-navy-muted">
+                        Saved ML risk score:{" "}
+                        <span className="font-semibold text-navy-foreground">
+                          {mlScore}/100
+                        </span>
+                      </div>
+
+                      <ReasonList txn={txn} />
+
+                      <PreventionList txn={txn} />
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}

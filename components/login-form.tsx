@@ -1,24 +1,41 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { DisputeShieldLogo } from "@/components/dispute-shield-logo"
+import { supabase } from "@/lib/supabase"
 
 export function LoginForm() {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState("")
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setSubmitting(true)
-    // No backend yet — this is the login UI only.
-    setTimeout(() => setSubmitting(false), 900)
+async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  e.preventDefault()
+
+  setSubmitting(true)
+  setError("")
+
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+
+  if (error) {
+    setError(error.message)
+    setSubmitting(false)
+    return
+  }
+
+  router.push("/dashboard")
   }
 
   function handleDemo() {
-    setEmail("merchant@demo.disputeshield.ai")
-    setPassword("demo-access")
+    setEmail("demo@disputeshield.ai")
+    setPassword("DisputeShield@123")
   }
 
   return (
@@ -100,6 +117,12 @@ export function LoginForm() {
               </button>
             </div>
           </div>
+
+          {error && (
+          <p className="text-sm text-red-500">
+          {error}
+          </p> 
+          )}
 
           <button
             type="submit"
