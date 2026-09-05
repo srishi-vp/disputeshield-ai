@@ -64,37 +64,104 @@ SHAP is used to identify the transaction features contributing most strongly to 
 ## 🏗️ Architecture
 
 
-  Transaction
-       ↓
-Next.js Merchant Dashboard
-       ↓
-FastAPI Prediction API
-       ↓
-Random Forest ML Model
-     ├── Fraud Probability
-     ├── Risk Score
-     └── SHAP Explanation
-             ↓
-      Prevention Engine
-             ↓
-          Supabase
-             ↓
-     ┌───────┴────────┐
-     ↓                ↓
-Risk Monitoring    Disputes
-                       ↓
-                  Gemini AI
-                       ↓
-              Evidence Center
-                       ↓
-               Human Approval
-                       ↓
-                Razorpay API
-                       ↓
-                  Webhooks
-                       ↓
-               Audit & Learning
-
+                         ┌──────────────────────────┐
+                         │       TRANSACTION        │
+                         │  Payment / Account Data  │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+                         ┌──────────────────────────┐
+                         │     DISPUTESHIELD AI     │
+                         │      NEXT.JS DASHBOARD   │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+                         ┌──────────────────────────┐
+                         │       FASTAPI API        │
+                         │     Risk Prediction      │
+                         └────────────┬─────────────┘
+                                      │
+                    ┌─────────────────┼─────────────────┐
+                    │                 │                 │
+                    ▼                 ▼                 ▼
+          ┌────────────────┐ ┌────────────────┐ ┌────────────────┐
+          │  ML RISK MODEL │ │     SHAP       │ │   PREVENTION   │
+          │ Random Forest  │ │ Explainability │ │     ENGINE      │
+          │                │ │                │ │                │
+          │ Fraud          │ │ Risk Reasons   │ │ AI Prevention  │
+          │ Probability    │ │                │ │ Actions        │
+          │ Risk Score     │ │                │ │                │
+          └───────┬────────┘ └───────┬────────┘ └───────┬────────┘
+                  │                  │                  │
+                  └──────────────────┼──────────────────┘
+                                     │
+                                     ▼
+                         ┌──────────────────────────┐
+                         │         SUPABASE         │
+                         │                          │
+                         │ Transactions             │
+                         │ Risk Results             │
+                         │ Disputes                 │
+                         │ Evidence                 │
+                         │ Audit Logs               │
+                         └────────────┬─────────────┘
+                                      │
+                    ┌─────────────────┴─────────────────┐
+                    │                                   │
+                    ▼                                   ▼
+          ┌────────────────────┐              ┌────────────────────┐
+          │   RISK MONITOR     │              │     DISPUTE        │
+          │                    │              │    MANAGEMENT      │
+          │ Risk Dashboard     │              │                    │
+          │ Alerts             │              │ Dispute Details    │
+          │ Transactions       │              │ Investigation       │
+          └────────────────────┘              └─────────┬──────────┘
+                                                        │
+                                                        ▼
+                                             ┌────────────────────┐
+                                             │     GEMINI AI      │
+                                             │                    │
+                                             │ Case Summary       │
+                                             │ Risk Assessment    │
+                                             │ Missing Evidence   │
+                                             │ Recommended Action │
+                                             │ Draft Response     │
+                                             └─────────┬──────────┘
+                                                       │
+                                                       ▼
+                                             ┌────────────────────┐
+                                             │   EVIDENCE CENTER  │
+                                             │                    │
+                                             │ Evidence Upload    │
+                                             │ Evidence Metadata  │
+                                             └─────────┬──────────┘
+                                                       │
+                                                       ▼
+                                             ┌────────────────────┐
+                                             │   HUMAN APPROVAL   │
+                                             │                    │
+                                             │     Approve /      │
+                                             │      Reject        │
+                                             └─────────┬──────────┘
+                                                       │
+                                             Approved │
+                                                       ▼
+                                             ┌────────────────────┐
+                                             │   RAZORPAY APIs    │
+                                             │                    │
+                                             │ Dispute Contest    │
+                                             │                    │
+                                             │     Webhooks       │
+                                             └─────────┬──────────┘
+                                                       │
+                                                       ▼
+                                             ┌────────────────────┐
+                                             │   AUDIT & LEARN    │
+                                             │                    │
+                                             │ Human Feedback     │
+                                             │ Dispute Outcomes   │
+                                             │ Analytics          │
+                                             └────────────────────┘
 
 💳 Razorpay Integration
 
@@ -145,28 +212,41 @@ Deployment
 Vercel
 
 
-📂 Project Structure
-DisputeShield-v0/
-├── app/
-│   ├── dashboard/
-│   ├── transactions/
-│   ├── risk-monitor/
-│   ├── disputes/
-│   ├── evidence-center/
-│   ├── analytics/
-│   ├── settings/
-│   └── api/
-├── components/
-├── lib/
-├── ml/
-│   ├── api/
-│   ├── transactions_train.csv
-│   ├── transactions_test.csv
-│   └── ml_predictions.csv
-├── public/
-├── package.json
-└── README.md
+## 📂 Project Structure
 
+- `app/` — Next.js pages and API routes
+  - `dashboard/` — Merchant dashboard
+  - `transactions/` — Transaction analysis
+  - `risk-monitor/` — Risk monitoring
+  - `disputes/` — Dispute management
+  - `evidence-center/` — Evidence management
+  - `analytics/` — Risk and dispute analytics
+  - `settings/` — Merchant settings
+  - `api/` — Backend API routes
+    - `dispute-approval/` — Human approval workflow
+    - `investigate-dispute/` — Gemini AI investigation
+    - `razorpay/contest/` — Razorpay dispute contest
+    - `razorpay/webhook/` — Razorpay webhook handling
+
+- `components/` — Reusable UI components
+
+- `lib/` — Supabase and application utilities
+
+- `ml/` — Machine Learning
+  - `api/predict.py` — Fraud prediction API
+  - `api/prevent.py` — Prevention engine
+  - `transactions_train.csv` — Training dataset
+  - `transactions_test.csv` — Held-out test dataset
+  - `ml_predictions.csv` — Model predictions
+
+- `public/` — Static assets
+
+- `package.json` — Project dependencies
+
+- `README.md` — Project documentation
+
+- `.gitignore` — Git ignored files
+- 
 
 🔐 Security
 API keys and secrets are stored as environment variables and are not committed to the repository.
